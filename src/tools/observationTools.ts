@@ -11,7 +11,11 @@ export function registerObservationTools(server: McpServer, context: ToolContext
   server.registerTool("desktop_get_capabilities", {
     description: "Report the detected session, fixed executable allowlist, screenshot backend, and current X11 feature availability.",
     inputSchema: z.object({}),
-  }, async (input) => executeTool(context, "desktop_get_capabilities", input, async () => textResult({ backend: context.backend.name, ...context.backend.capabilities })));
+  }, async (input) => executeTool(context, "desktop_get_capabilities", input, async () => textResult({
+    backend: context.backend.name,
+    ...context.backend.capabilities,
+    ...(await context.screenMap.getCapabilities()),
+  })));
 
   server.registerTool("desktop_get_screen_info", {
     description: "Get root-screen dimensions and, when xrandr is installed, the connected monitor layout.",

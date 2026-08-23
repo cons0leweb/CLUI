@@ -5,6 +5,9 @@ describe("ActionGuard", () => {
   const guard = new ActionGuard();
   it("classifies observation and interaction centrally", () => {
     expect(guard.classify("desktop_screenshot", {})).toBe("read_only");
+    expect(guard.classify("desktop_observe_marked", {})).toBe("read_only");
+    expect(guard.classify("desktop_get_elements", {})).toBe("read_only");
+    expect(guard.classify("desktop_click_element", {})).toBe("interaction");
     expect(guard.classify("desktop_click", {})).toBe("interaction");
   });
   it("identifies a small high-impact shortcut set", () => {

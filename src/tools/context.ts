@@ -1,10 +1,12 @@
 import type { DesktopBackend } from "../backend/DesktopBackend.js";
+import type { ScreenMapService } from "../screenmap/ScreenMapService.js";
 import { log, summarizeToolInput } from "../logging.js";
 import type { ActionGuard } from "../safety/ActionGuard.js";
 
 export interface ToolContext {
   backend: DesktopBackend;
   guard: ActionGuard;
+  screenMap: ScreenMapService;
 }
 
 export async function executeTool<T>(

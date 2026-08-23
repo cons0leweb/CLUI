@@ -3,6 +3,7 @@ export type ActionClass = "read_only" | "interaction" | "high_impact";
 const READ_ONLY = new Set([
   "desktop_get_active_window", "desktop_list_windows", "desktop_find_window", "desktop_get_window_info",
   "desktop_screenshot", "desktop_get_mouse_position", "desktop_get_screen_info", "desktop_observe", "desktop_get_capabilities",
+  "desktop_observe_marked", "desktop_get_elements", "desktop_element_info",
 ]);
 
 const HIGH_IMPACT_KEYS = new Set(["Delete", "KP_Delete"]);
