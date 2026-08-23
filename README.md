@@ -1,57 +1,67 @@
-# CLUI — Codex Linux UI Interaction
+# CLUI
 
 [![CI](https://github.com/cons0leweb/CLUI/actions/workflows/ci.yml/badge.svg)](https://github.com/cons0leweb/CLUI/actions/workflows/ci.yml)
-[![Node.js 20+](https://img.shields.io/badge/Node.js-20%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-CLUI is a small standalone MCP server that gives a local agent a basic Linux desktop computer-use loop:
+CLUI stands for Codex Linux UI Interaction. It is a local MCP server that lets Codex inspect and control an X11 desktop.
 
-`observe → decide → act → observe`
+I wanted Codex to be able to start a GUI application, look at it, interact with it, and check the result. CLUI covers that loop without the Computer Use API or browser automation:
 
-It exposes X11 window discovery, focus verification, screenshots as MCP image content, mouse and keyboard input, window-relative coordinates, bounded action batches, and combined observations. It does **not** expose a shell, arbitrary executable names, Playwright, OCR, or remote-control infrastructure.
+```text
+observe -> decide -> act -> observe
+```
 
-## Status
+It can list windows, focus one, take screenshots, move and click the mouse, and send keyboard input. Screenshots are returned as MCP image content, so the client can inspect them directly.
 
-- Linux, X11 first
-- Node.js 20+
-- TypeScript, ESM
-- MCP TypeScript SDK v2 (`@modelcontextprotocol/server`)
-- stdio transport (`node dist/index.js`)
-- Wayland backend: not implemented; a Wayland-only session is detected and reported without bypass hacks
+## Current status
 
-## Requirements
+The server targets Linux/X11 and Node.js 20+. It is written in TypeScript, uses the MCP TypeScript SDK v2, and runs over stdio. Wayland sessions are detected but not supported yet.
 
-Required for the full MVP on Debian/Ubuntu:
+## System packages
+
+On Debian or Ubuntu:
 
 ```bash
 sudo apt install xdotool x11-utils imagemagick
 ```
 
-Recommended for faster screenshots and monitor discovery:
+`maim` is the preferred screenshot command. `xrandr` is used for monitor layout:
 
 ```bash
 sudo apt install maim x11-xserver-utils
 ```
 
-Optional screenshot fallback:
+`scrot` can be installed as a screenshot fallback:
 
 ```bash
 sudo apt install scrot
 ```
 
-Package names vary by distribution. CLUI detects `xdotool`, `xprop`, `xwininfo`, `xrandr`, `maim`, ImageMagick `import`/`convert`, and `scrot` at startup. Missing tools produce explicit capability errors rather than raw `ENOENT` failures.
+Package names differ between distributions. At startup, CLUI checks for:
 
-An accessible X11 display is also required. When launching from a service or sandbox, forward `DISPLAY` and any required Xauthority environment deliberately.
+```text
+xdotool  xprop  xwininfo  xrandr  maim  import  convert  scrot
+```
 
-## Install, build, and run
+Missing commands are reported by `desktop_get_capabilities` and in stderr logs.
+
+CLUI also needs access to the X11 session. Make sure `DISPLAY` and, when needed, `XAUTHORITY` are available to the process that starts it.
+
+## Install
 
 ```bash
+git clone git@github.com:cons0leweb/CLUI.git
+cd CLUI
 npm install
 npm run build
+```
+
+Run the server with:
+
+```bash
 npm start
 ```
 
-`npm start` runs `node dist/index.js`. stdout is reserved for MCP JSON-RPC; structured diagnostics go only to stderr.
+This runs `node dist/index.js`. stdout is reserved for MCP traffic. Logs go to stderr.
 
 For development:
 
@@ -59,9 +69,9 @@ For development:
 npm run dev
 ```
 
-## Codex configuration
+## Codex config
 
-Add this to `~/.codex/config.toml` (replace the path if the project lives elsewhere):
+Add this to `~/.codex/config.toml` and adjust the paths:
 
 ```toml
 [mcp_servers.clui]
@@ -73,162 +83,174 @@ startup_timeout_sec = 10
 tool_timeout_sec = 60
 ```
 
-The names above follow the current official Codex configuration reference: local stdio servers use `mcp_servers.<id>.command`, `args`, `cwd`, and optional `env_vars`.
+The same config is available in [`examples/codex.config.toml`](examples/codex.config.toml). The key names come from the [Codex configuration reference](https://developers.openai.com/codex/config-file/config-reference).
 
-## MCP Inspector
-
-Build first, then launch the Inspector against the stdio command:
-
-```bash
-npx @modelcontextprotocol/inspector node dist/index.js
-```
-
-For a noninteractive tool-list check with current Inspector releases:
-
-```bash
-npx @modelcontextprotocol/inspector --cli node dist/index.js --method tools/list
-```
-
-In the web UI, connect, open **Tools**, call `desktop_get_capabilities`, then exercise read-only tools before interaction tools.
+Restart Codex after adding the server. Call `desktop_get_capabilities` first to check the session and installed commands.
 
 ## Tools
 
-Window and display observation:
+| Area | Tools |
+| --- | --- |
+| Windows | `desktop_get_active_window`, `desktop_list_windows`, `desktop_find_window`, `desktop_get_window_info`, `desktop_focus_window` |
+| Screen | `desktop_get_capabilities`, `desktop_screenshot`, `desktop_get_screen_info`, `desktop_observe` |
+| Mouse | `desktop_get_mouse_position`, `desktop_move_mouse`, `desktop_move_mouse_window`, `desktop_click`, `desktop_click_window`, `desktop_mouse_down`, `desktop_mouse_up`, `desktop_scroll` |
+| Keyboard | `desktop_key_press`, `desktop_key_down`, `desktop_key_up`, `desktop_type_text` |
+| Other | `desktop_wait`, `desktop_act` |
 
-- `desktop_get_capabilities`
-- `desktop_get_active_window`
-- `desktop_list_windows`
-- `desktop_find_window`
-- `desktop_get_window_info`
-- `desktop_get_mouse_position`
-- `desktop_get_screen_info`
-- `desktop_observe`
+`desktop_wait` accepts up to 10 seconds. `desktop_act` accepts up to 20 actions. Supported actions are `focus`, `move`, `click`, `key`, `type`, `wait`, and `scroll`. It has no shell action.
 
-Screenshots:
+### Window-relative coordinates
 
-- `desktop_screenshot` with `screen`, `active_window`, `window`, or `region` mode
-- optional `max_width` / `max_height` downscale when ImageMagick `convert` is available
-- PNG returned inline as MCP `{ type: "image", data: <base64>, mimeType: "image/png" }`
+`desktop_move_mouse_window` and `desktop_click_window` can use pixels relative to a window or normalized coordinates between `0` and `1`.
 
-Window and pointer interaction:
+This targets the center of a window:
 
-- `desktop_focus_window`
-- `desktop_move_mouse`
-- `desktop_move_mouse_window`
-- `desktop_click`
-- `desktop_click_window`
-- `desktop_mouse_down`
-- `desktop_mouse_up`
-- `desktop_scroll`
+```json
+{
+  "window_id": "0x4600007",
+  "x": 0.5,
+  "y": 0.5,
+  "normalized": true
+}
+```
 
-Keyboard and orchestration:
+### Screenshots
 
-- `desktop_key_press`
-- `desktop_key_down`
-- `desktop_key_up`
-- `desktop_type_text`
-- `desktop_wait` (maximum 10 seconds)
-- `desktop_act` (maximum 20 GUI-only actions; no shell action)
+`desktop_screenshot` supports four modes:
 
-Window-relative tools accept pixel coordinates or normalized values from `0` to `1`. For example, `{ "window_id": "0x4600007", "x": 0.5, "y": 0.5, "normalized": true }` targets the window center independently of screen resolution.
+- `screen`
+- `active_window`
+- `window`
+- `region`
 
-## Screenshot selection
+It returns a PNG image block:
 
-CLUI selects the first available backend in this order:
+```json
+{
+  "type": "image",
+  "data": "<base64>",
+  "mimeType": "image/png"
+}
+```
+
+`max_width` and `max_height` can be used to reduce the image size. ImageMagick `convert` handles the resize, keeps the aspect ratio, and does not upscale. Region coordinates are global screen coordinates.
+
+Screenshot commands are tried in this order:
 
 1. `maim`
 2. ImageMagick `import`
 3. `scrot`
 
-`maim` and `import` can capture a specific X11 window ID. The `scrot` fallback captures the window's current screen rectangle, so overlapping windows can appear in that fallback image. Region coordinates are global root-screen coordinates. Downscaling preserves aspect ratio and never upscales.
+`maim` and `import` can capture an X11 window by ID. With `scrot`, a window screenshot is taken from its screen rectangle, so another window may cover part of it.
 
-## Security model
+`desktop_observe` returns the active window, mouse position, screen information, and a screenshot in one call. It can also include a window list summary.
 
-CLUI is local and powerful: clicks and keystrokes have the same authority as the user running the process. Run it only in a desktop session and account you intend the agent to control.
+## Security
 
-The command boundary is intentionally narrow:
+CLUI runs with the permissions of its user. A client connected to it can click buttons and type into any window in that X11 session. Do not expose the server over the network.
 
-- one `runCommand(executable, args, timeout)` implementation owns subprocess execution;
-- executable names are a compile-time fixed allowlist;
-- every call uses `child_process.spawn` with `shell: false` and argument arrays;
-- user text is passed as one literal `xdotool` argument, never interpolated into a command string;
-- every subprocess has a timeout and output cap, and hung processes are killed;
-- there is no MCP shell/exec/run-command tool;
-- structured logs go to stderr and `desktop_type_text` logs only text length.
+External commands are limited to a fixed allowlist:
 
-`ActionGuard` centrally classifies calls as:
+```text
+xdotool  xprop  xwininfo  xrandr  maim  import  convert  scrot
+```
 
-- `read_only`: capabilities, window/screen/mouse observation, screenshots;
-- `interaction`: focus, pointer actions, ordinary keyboard input, waits;
-- `high_impact`: a small initial set of potentially destructive shortcuts such as `Alt+F4` and modified Delete.
+All commands go through `runCommand(executable, args, timeout)`. It uses `child_process.spawn` with `shell: false` and argument arrays. Client input is never concatenated into a shell command. Processes have timeouts and output limits, and a process that hangs is killed.
 
-The MVP records but does not block `high_impact`; `ActionGuard.authorize` is the single extension point for a future approval policy.
+`desktop_type_text` passes the text as one argument to `xdotool`. Logs contain the text length, not the text itself.
 
-## Tests and smoke test
+There are no MCP tools named `shell`, `exec`, `bash`, or `run_command`.
+
+`ActionGuard` assigns one of three classes to each call:
+
+- `read_only` for screenshots and state queries
+- `interaction` for focus, mouse, keyboard, and wait operations
+- `high_impact` for shortcuts such as `Alt+F4` and modified Delete
+
+The current policy logs the class but does not block `high_impact` calls. Approval logic can be added in `ActionGuard.authorize` without changing the tool handlers.
+
+## Tests
 
 ```bash
 npm test
+```
+
+The tests cover command execution, timeouts, missing executables, literal argument handling, X11 output parsing, window filtering, coordinate conversion, tool schemas, action limits, and guard classification.
+
+There is also an X11 smoke test:
+
+```bash
 npm run smoke
 ```
 
-Unit tests cover command execution, timeout and ENOENT typing, literal argument safety, X11 geometry parsing, xprop parsing, window filtering, normalized coordinates, schemas, batch limits, and action classification.
+It reads the active window, takes a full-screen screenshot, reads the mouse position, and lists windows. Each check is reported separately, which is useful when only some system packages are installed.
 
-The smoke script reads the active window, takes a screenshot, reads mouse position, and lists windows. It does not move the pointer unless explicitly invoked with:
+The smoke test does not move the pointer unless this flag is passed:
 
 ```bash
 npm run smoke -- --move-mouse
 ```
 
-## Safe demo flow
+## Demo
 
 ```bash
 npm run demo
 ```
 
-If a visible Minecraft window exists, the demo focuses it, captures a before image, presses `Escape`, waits 500 ms, and captures an after image under `artifacts/`. It never clicks an unknown coordinate. If Minecraft is absent, it performs an observe-only screenshot of the active window and sends no input.
+If Minecraft is running, the demo finds its window, focuses it, saves a screenshot, presses `Escape`, waits 500 ms, and saves another screenshot. Files are written under `artifacts/`.
 
-## X11 limitations
+If no Minecraft window is found, the demo only takes a screenshot of the active window. It does not click or send keyboard input to an unknown application.
 
-- Window activation depends on an EWMH-compatible window manager honoring `_NET_ACTIVE_WINDOW`.
-- X11 has no strong application isolation: any process connected to the display may generally observe or inject input.
-- `xdotool type` Unicode behavior depends on the active keyboard layout/input method; spaces, punctuation, and multiline text are passed literally.
-- Window geometry can include decorations differently across window managers; CLUI uses `xwininfo` absolute geometry.
-- Horizontal scrolling uses conventional X11 buttons 6/7 and is not supported by every application.
-- Screenshots may fail in locked sessions, protected surfaces, nested displays, or when ImageMagick policy disables X11 capture.
-- Multi-monitor layout requires `xrandr`; root size remains available without it.
-- No automatic OCR is performed; the MCP client receives the image for visual analysis.
+## MCP Inspector
 
-## Wayland
+Build the server, then run:
 
-Wayland is intentionally not automated in this MVP. If `DISPLAY` is absent and only `WAYLAND_DISPLAY` exists, CLUI starts its MCP surface, reports the session in `desktop_get_capabilities`, and returns a clear X11-required error from desktop operations. A future `WaylandBackend` can implement the same `DesktopBackend` interface using explicit compositor/portal support.
+```bash
+npx @modelcontextprotocol/inspector node dist/index.js
+```
+
+To list tools without opening the web interface:
+
+```bash
+npx @modelcontextprotocol/inspector --cli node dist/index.js --method tools/list
+```
+
+## Limitations
+
+- Native Wayland support is not implemented. CLUI does not try to bypass compositor security rules.
+- Window activation depends on the window manager accepting `_NET_ACTIVE_WINDOW`.
+- X11 does not isolate applications from each other. A process connected to the display can usually observe windows and inject input.
+- Window decorations are handled differently by different window managers. Geometry comes from `xwininfo`.
+- `xdotool type` Unicode support depends on the current keyboard layout and input method. Spaces, punctuation, and newlines are passed literally.
+- Horizontal scrolling uses X11 buttons 6 and 7. Some applications ignore them.
+- Screenshots may fail on a locked session, protected surfaces, nested displays, or restrictive ImageMagick policies.
+- Monitor layout requires `xrandr`. Root screen dimensions are still available without it.
+- CLUI does not run OCR. The MCP client receives the screenshot and analyzes it.
+
+If `DISPLAY` is missing and `WAYLAND_DISPLAY` is set, the server still starts. `desktop_get_capabilities` reports the Wayland session, and desktop operations return an X11-specific error.
 
 ## Troubleshooting
 
-- **`xdotool` unavailable**: install it, restart CLUI, and call `desktop_get_capabilities` again.
-- **`xwininfo` or `xprop` unavailable**: install your distribution's `x11-utils` package.
-- **No screenshot backend**: install `maim`, ImageMagick, or `scrot`.
-- **`Can't open display`**: verify `DISPLAY`, Xauthority permissions, and that Codex launches CLUI in the same graphical session.
-- **Wayland-only error**: log into an X11 session or run the target under a deliberately configured XWayland environment; native Wayland is not yet implemented.
-- **Focus timeout**: the window manager denied activation, the window closed, or its ID changed; list/find it again.
-- **Unicode typing mismatch**: configure the X11 keyboard/input method or paste through the target application manually; CLUI does not use a clipboard helper in this MVP.
+- `Required executable 'xdotool' is unavailable`: install `xdotool`, restart the server, and call `desktop_get_capabilities` again.
+- Missing `xwininfo` or `xprop`: install the package that provides them. On Debian and Ubuntu, both are in `x11-utils`.
+- `No screenshot utility found`: install `maim`, ImageMagick, or `scrot`.
+- `Can't open display`: check `DISPLAY`, `XAUTHORITY`, and the user running the MCP process.
+- Focus timeout: the window manager may have rejected activation, or the window may have closed. List the windows again and retry with the new ID.
+- Wrong characters from `desktop_type_text`: check the X11 keyboard layout and input method. CLUI does not use a clipboard fallback.
 
-## Architecture
+## Source layout
 
 ```text
 src/
-  backend/    DesktopBackend contract, capability detection, X11 implementation/parsers
-  safety/     centralized action classification and future authorization hook
-  system/     allowlisted subprocess runner and PNG metadata
-  tools/      MCP schemas and narrowly scoped tool registration modules
-  types/      desktop domain types
-  server.ts   composition only
-  index.ts    startup, diagnostics, stdio transport
-scripts/      read-only smoke test and safe Minecraft demo
+  backend/    DesktopBackend, X11 implementation, capability checks, parsers
+  safety/     action classification and approval hook
+  system/     command runner and PNG helpers
+  tools/      MCP schemas and tool registration
+  types/      desktop types
+  index.ts    startup and stdio transport
+  server.ts   MCP server setup
+scripts/      smoke test and Minecraft demo
 tests/        unit tests
 ```
 
-This boundary keeps X11 mechanics out of MCP handlers and leaves room for a later `WaylandBackend` without changing the public tool surface.
-
-## Contributing and security
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and architecture boundaries. Report vulnerabilities through GitHub private security advisories as described in [SECURITY.md](SECURITY.md).
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) before changing the backend or command allowlist. Security reports should follow [`SECURITY.md`](SECURITY.md).
