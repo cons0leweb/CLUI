@@ -1,0 +1,56 @@
+{
+  "name": "clui-mcp",
+  "version": "0.1.0",
+  "description": "CLUI — a small, local X11 desktop computer-use MCP server",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "computer-use",
+    "desktop-automation",
+    "x11",
+    "linux"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cons0leweb/CLUI.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cons0leweb/CLUI/issues"
+  },
+  "homepage": "https://github.com/cons0leweb/CLUI#readme",
+  "type": "module",
+  "bin": {
+    "clui-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke": "tsx scripts/smoke.ts",
+    "demo": "tsx scripts/demo.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^6.0.0",
+    "vitest": "^3.2.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,8 @@
+# Merge this table into ~/.codex/config.toml and adjust paths as needed.
+[mcp_servers.clui]
+command = "node"
+args = ["/home/cons0leweb/JS/CLUI/dist/index.js"]
+cwd = "/home/cons0leweb/JS/CLUI"
+env_vars = ["DISPLAY", "XAUTHORITY", "XDG_SESSION_TYPE", "WAYLAND_DISPLAY"]
+startup_timeout_sec = 10
+tool_timeout_sec = 60
