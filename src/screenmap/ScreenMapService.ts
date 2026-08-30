@@ -31,6 +31,20 @@ export type ClickPosition =
   | { type: "top_left" }
   | { type: "custom"; x: number; y: number };
 
+function readonlyMap<K, V>(source: Map<K, V>): ReadonlyMap<K, V> {
+  return Object.freeze({
+    get size() { return source.size; },
+    get: source.get.bind(source),
+    has: source.has.bind(source),
+    forEach: source.forEach.bind(source),
+    entries: source.entries.bind(source),
+    keys: source.keys.bind(source),
+    values: source.values.bind(source),
+    [Symbol.iterator]: source[Symbol.iterator].bind(source),
+    [Symbol.toStringTag]: "Map",
+  });
+}
+
 function geometryChanged(before: WindowInfo, after: WindowInfo): boolean {
   const positionDelta = Math.max(Math.abs(before.x - after.x), Math.abs(before.y - after.y));
   const widthDelta = Math.abs(before.width - after.width) / Math.max(1, before.width);
@@ -122,7 +136,7 @@ export class ScreenMapService {
       window: Object.freeze({ ...window }),
       screenshot: annotated,
       elements: Object.freeze(elements),
-      targets,
+      targets: readonlyMap(targets),
       screenMapAvailable: elements.length > 0,
       annotatedScreenshotAvailable,
       reason,
@@ -143,15 +157,11 @@ export class ScreenMapService {
   }
 
   getElement(snapshotId: string, elementId: number): ScreenElement {
-    const snapshot = this.cache.get(snapshotId);
-    const element = snapshot.elements.find(({ id }) => id === elementId);
-    if (!element) throw new Error(`Element ${elementId} does not exist in ScreenMap snapshot '${snapshotId}'`);
-    return element;
+    return this.getSnapshotElement(snapshotId, elementId).element;
   }
 
   async clickElement(snapshotId: string, elementId: number, button: MouseButton, position?: ClickPosition): Promise<{ point: Point; element: ScreenElement }> {
-    const snapshot = this.cache.get(snapshotId);
-    const element = this.getElement(snapshotId, elementId);
+    const { snapshot, element } = this.getSnapshotElement(snapshotId, elementId);
     await this.assertFreshGeometry(snapshot, element);
     const point = elementClickPoint(element, position);
     this.assertPointInWindow(point, snapshot.window);
@@ -161,8 +171,7 @@ export class ScreenMapService {
   }
 
   async focusElement(snapshotId: string, elementId: number): Promise<{ method: "accessibility_action" | "mouse_fallback"; point?: Point }> {
-    const snapshot = this.cache.get(snapshotId);
-    const element = this.getElement(snapshotId, elementId);
+    const { snapshot, element } = this.getSnapshotElement(snapshotId, elementId);
     await this.assertFreshGeometry(snapshot, element);
     const target = snapshot.targets.get(elementId);
     if (target) {
@@ -173,6 +182,13 @@ export class ScreenMapService {
     await this.desktop.moveMouse(point.x, point.y);
     await this.desktop.clickMouse("left");
     return { method: "mouse_fallback", point };
+  }
+
+  private getSnapshotElement(snapshotId: string, elementId: number): { snapshot: ScreenMapSnapshot; element: ScreenElement } {
+    const snapshot = this.cache.get(snapshotId);
+    const element = snapshot.elements.find(({ id }) => id === elementId);
+    if (!element) throw new Error(`Element ${elementId} does not exist in ScreenMap snapshot '${snapshotId}'`);
+    return { snapshot, element };
   }
 
   private async assertFreshGeometry(snapshot: ScreenMapSnapshot, element: ScreenElement): Promise<void> {

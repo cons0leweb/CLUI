@@ -1,6 +1,6 @@
 export type LogLevel = "info" | "error";
 
-export function log(level: LogLevel, event: string, fields: Record<string, unknown> = {}): void {
+export function log(level: LogLevel, event: string, fields: object = {}): void {
   process.stderr.write(`${JSON.stringify({ timestamp: new Date().toISOString(), level, event, ...fields })}\n`);
 }
 

@@ -15,8 +15,8 @@ async function main(): Promise<void> {
   const screenMapCapabilities = await screenMap.getCapabilities();
   log("info", "mcp_startup", { name: "clui", version: "0.2.0", transport: "stdio" });
   log("info", "backend_selected", { backend: backend.name, session: capabilities.session });
-  log("info", "capabilities_detected", capabilities as unknown as Record<string, unknown>);
-  log("info", "screen_map_capabilities", screenMapCapabilities as unknown as Record<string, unknown>);
+  log("info", "capabilities_detected", capabilities);
+  log("info", "screen_map_capabilities", screenMapCapabilities);
   if (capabilities.session !== "x11") {
     log("error", "x11_unavailable", { message: capabilities.session === "wayland"
       ? "Wayland-only session detected; Wayland backend is not implemented."

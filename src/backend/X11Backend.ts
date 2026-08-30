@@ -39,6 +39,16 @@ function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function requireWindowId(windowId: string | undefined): string {
+  if (!windowId) throw new Error("A window id is required for this screenshot mode");
+  return normalizeWindowId(windowId);
+}
+
+function requireRegion(region: { x: number; y: number; width: number; height: number } | undefined): { x: number; y: number; width: number; height: number } {
+  if (!region) throw new Error("A region is required for region screenshot mode");
+  return region;
+}
+
 export class X11Backend implements DesktopBackend {
   readonly name = "x11";
 
@@ -68,11 +78,12 @@ export class X11Backend implements DesktopBackend {
     this.requireExecutable("xdotool");
   }
 
-  async getActiveWindow(): Promise<WindowInfo | null> {
+  async getActiveWindow(timeoutMs = 5_000): Promise<WindowInfo | null> {
     this.requireWindowObservation();
-    const raw = await runText("xprop", ["-root", "_NET_ACTIVE_WINDOW"]);
+    const deadline = performance.now() + timeoutMs;
+    const raw = await runText("xprop", ["-root", "_NET_ACTIVE_WINDOW"], Math.max(1, Math.ceil(deadline - performance.now())));
     const id = parseActiveWindowId(raw);
-    return id ? await this.getWindowInfo(id) : null;
+    return id ? await this.getWindowInfo(id, Math.max(1, Math.ceil(deadline - performance.now()))) : null;
   }
 
   async listWindows(): Promise<WindowInfo[]> {
@@ -96,12 +107,12 @@ export class X11Backend implements DesktopBackend {
     });
   }
 
-  async getWindowInfo(windowId: string): Promise<WindowInfo> {
+  async getWindowInfo(windowId: string, timeoutMs = 5_000): Promise<WindowInfo> {
     this.requireWindowObservation();
     const id = normalizeWindowId(windowId);
     const [properties, geometry] = await Promise.all([
-      runText("xprop", ["-id", id, "_NET_WM_NAME", "WM_NAME", "WM_CLASS", "_NET_WM_PID", "_NET_WM_WINDOW_TYPE"]),
-      runText("xwininfo", ["-id", id]),
+      runText("xprop", ["-id", id, "_NET_WM_NAME", "WM_NAME", "WM_CLASS", "_NET_WM_PID", "_NET_WM_WINDOW_TYPE"], timeoutMs),
+      runText("xwininfo", ["-id", id], timeoutMs),
     ]);
     const fields = parseXPropWindow(properties);
     return { id, ...fields, class: fields.className, ...parseXWinInfo(geometry) };
@@ -122,7 +133,7 @@ export class X11Backend implements DesktopBackend {
     await runCommand("xdotool", ["windowactivate", "--sync", id], { timeoutMs });
     const deadline = performance.now() + timeoutMs;
     while (performance.now() < deadline) {
-      const active = await this.getActiveWindow();
+      const active = await this.getActiveWindow(Math.max(1, Math.ceil(deadline - performance.now())));
       if (active?.id === id) return active;
       await sleep(50);
     }
@@ -143,6 +154,7 @@ export class X11Backend implements DesktopBackend {
     }
     if (options.mode === "window" && !windowId) throw new Error("windowId is required in window mode");
     if (options.mode === "region" && !region) throw new Error("region is required in region mode");
+    if (options.mode === "region") region = requireRegion(region);
 
     let png: Buffer;
     if (backend === "maim") png = await this.screenshotMaim(options.mode, windowId, region);
@@ -167,22 +179,28 @@ export class X11Backend implements DesktopBackend {
 
   private async screenshotMaim(mode: ScreenshotOptions["mode"], windowId?: string, region?: { x: number; y: number; width: number; height: number }): Promise<Buffer> {
     const args = ["-u", "-f", "png"];
-    if (mode === "window" || mode === "active_window") args.push("-i", normalizeWindowId(windowId!));
-    if (mode === "region") args.push("-g", `${region!.width}x${region!.height}+${region!.x}+${region!.y}`);
+    if (mode === "window" || mode === "active_window") args.push("-i", requireWindowId(windowId));
+    if (mode === "region") {
+      const selectedRegion = requireRegion(region);
+      args.push("-g", `${selectedRegion.width}x${selectedRegion.height}+${selectedRegion.x}+${selectedRegion.y}`);
+    }
     return (await runCommand("maim", args, { timeoutMs: 10_000 })).stdout;
   }
 
   private async screenshotImport(mode: ScreenshotOptions["mode"], windowId?: string, region?: { x: number; y: number; width: number; height: number }): Promise<Buffer> {
-    const target = mode === "window" || mode === "active_window" ? normalizeWindowId(windowId!) : "root";
+    const target = mode === "window" || mode === "active_window" ? requireWindowId(windowId) : "root";
     const args = ["-silent", "-window", target];
-    if (mode === "region") args.push("-crop", `${region!.width}x${region!.height}+${region!.x}+${region!.y}`, "+repage");
+    if (mode === "region") {
+      const selectedRegion = requireRegion(region);
+      args.push("-crop", `${selectedRegion.width}x${selectedRegion.height}+${selectedRegion.x}+${selectedRegion.y}`, "+repage");
+    }
     args.push("png:-");
     return (await runCommand("import", args, { timeoutMs: 10_000 })).stdout;
   }
 
   private async screenshotScrot(mode: ScreenshotOptions["mode"], windowId?: string, region?: { x: number; y: number; width: number; height: number }): Promise<Buffer> {
-    if ((mode === "window" || mode === "active_window") && windowId) {
-      const window = await this.getWindowInfo(windowId);
+    if (mode === "window" || mode === "active_window") {
+      const window = await this.getWindowInfo(requireWindowId(windowId));
       region = window;
     }
     const directory = await mkdtemp(join(tmpdir(), "clui-shot-"));

@@ -52,6 +52,8 @@ export async function runCommand(
   if (!isAllowed(executable)) throw new Error(`Executable is not allowlisted: ${String(executable)}`);
   const timeoutMs = options.timeoutMs ?? 5_000;
   const maxOutputBytes = options.maxOutputBytes ?? 64 * 1024 * 1024;
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) throw new RangeError("timeoutMs must be a positive integer");
+  if (!Number.isInteger(maxOutputBytes) || maxOutputBytes <= 0) throw new RangeError("maxOutputBytes must be a positive integer");
   const started = performance.now();
 
   return await new Promise<CommandResult>((resolve, reject) => {
@@ -78,7 +80,15 @@ export async function runCommand(
     }, timeoutMs);
     timer.unref();
 
-    child.stdout!.on("data", (chunk: Buffer) => {
+    const stdoutStream = child.stdout;
+    const stderrStream = child.stderr;
+    if (!stdoutStream || !stderrStream) {
+      child.kill("SIGKILL");
+      fail(new CommandError(`Failed to capture ${executable} output`, executable, args, "spawn", null, ""));
+      return;
+    }
+
+    stdoutStream.on("data", (chunk: Buffer) => {
       outputBytes += chunk.length;
       if (outputBytes > maxOutputBytes) {
         child.kill("SIGKILL");
@@ -87,7 +97,7 @@ export async function runCommand(
       }
       stdout.push(chunk);
     });
-    child.stderr!.on("data", (chunk: Buffer) => {
+    stderrStream.on("data", (chunk: Buffer) => {
       outputBytes += chunk.length;
       if (outputBytes > maxOutputBytes) {
         child.kill("SIGKILL");

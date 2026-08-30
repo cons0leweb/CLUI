@@ -17,13 +17,16 @@ export class SnapshotExpiredError extends Error {
 export class SnapshotCache {
   private readonly snapshots = new Map<string, ScreenMapSnapshot>();
 
-  constructor(readonly maxEntries = 15, readonly ttlMs = 60_000, private readonly now = () => Date.now()) {}
+  constructor(readonly maxEntries = 15, readonly ttlMs = 60_000, private readonly now = () => Date.now()) {
+    if (!Number.isInteger(maxEntries) || maxEntries < 1) throw new RangeError("maxEntries must be a positive integer");
+    if (!Number.isInteger(ttlMs) || ttlMs < 1) throw new RangeError("ttlMs must be a positive integer");
+  }
 
   put(snapshot: ScreenMapSnapshot): void {
     this.prune();
     this.snapshots.set(snapshot.snapshotId, snapshot);
     while (this.snapshots.size > this.maxEntries) {
-      const oldest = this.snapshots.keys().next().value as string | undefined;
+      const oldest = this.snapshots.keys().next().value;
       if (!oldest) break;
       this.snapshots.delete(oldest);
     }
