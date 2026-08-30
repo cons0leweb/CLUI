@@ -8,6 +8,11 @@ function snapshot(id: string, expiresAt: number): ScreenMapSnapshot {
 }
 
 describe("SnapshotCache", () => {
+  it("rejects invalid cache configuration", () => {
+    expect(() => new SnapshotCache(0)).toThrow(/maxEntries/);
+    expect(() => new SnapshotCache(1, 0)).toThrow(/ttlMs/);
+  });
+
   it("expires snapshots", () => {
     let now = 10;
     const cache = new SnapshotCache(2, 50, () => now);

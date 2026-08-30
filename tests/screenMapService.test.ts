@@ -17,6 +17,9 @@ describe("ScreenMapService", () => {
     expect(snapshot.elements[0]?.id).toBe(1);
     expect(Object.isFrozen(snapshot)).toBe(true);
     expect(Object.isFrozen(snapshot.elements)).toBe(true);
+    expect(Object.isFrozen(snapshot.targets)).toBe(true);
+    expect("set" in snapshot.targets).toBe(false);
+    expect(snapshot.targets.get(1)).toEqual({ backend: "fake", application: ":1.1", path: "/button" });
   });
 
   it("returns a raw screenshot fallback for an empty accessibility tree", async () => {

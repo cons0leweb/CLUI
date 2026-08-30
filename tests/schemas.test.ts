@@ -21,6 +21,11 @@ describe("tool schemas", () => {
     expect(actSchema.safeParse({ actions: [{ type: "focus", title: "Minecraft" }] }).success).toBe(true);
   });
 
+  it("requires a region for region screenshots", () => {
+    expect(screenshotSchema.safeParse({ mode: "region" }).success).toBe(false);
+    expect(screenshotSchema.safeParse({ mode: "region", region: { x: 0, y: 0, width: 10, height: 10 } }).success).toBe(true);
+  });
+
   it("applies normalized defaults and validates ids", () => {
     const parsed = windowPointSchema.parse({ window_id: "123", x: 0.5, y: 0.5 });
     expect(parsed.normalized).toBe(false);

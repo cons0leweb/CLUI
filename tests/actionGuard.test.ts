@@ -12,5 +12,12 @@ describe("ActionGuard", () => {
   });
   it("identifies a small high-impact shortcut set", () => {
     expect(guard.classify("desktop_key_press", { key: "F4", modifiers: ["Alt"] })).toBe("high_impact");
+    expect(guard.classify("desktop_key_press", { key: "Delete", modifiers: ["Ctrl"] })).toBe("high_impact");
+    expect(guard.classify("desktop_act", { actions: [{ type: "key", key: "KP_Delete", modifiers: ["Shift"] }] })).toBe("high_impact");
+  });
+
+  it("treats malformed raw input as ordinary interaction instead of throwing", () => {
+    expect(guard.classify("desktop_key_press", { key: "F4", modifiers: "Alt" })).toBe("interaction");
+    expect(guard.classify("desktop_act", { actions: "not an array" })).toBe("interaction");
   });
 });

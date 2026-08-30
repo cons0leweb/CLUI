@@ -37,4 +37,9 @@ describe.sequential("runCommand", () => {
     process.env.PATH = "/path/that/does/not/exist";
     await expect(runCommand("xprop", [])).rejects.toMatchObject({ kind: "not_found" } satisfies Partial<CommandError>);
   });
+
+  it("rejects invalid resource limits before spawning", async () => {
+    await expect(runCommand("xprop", [], { timeoutMs: 0 })).rejects.toThrow(/timeoutMs/);
+    await expect(runCommand("xprop", [], { maxOutputBytes: 0 })).rejects.toThrow(/maxOutputBytes/);
+  });
 });
