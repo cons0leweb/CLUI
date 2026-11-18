@@ -46,16 +46,30 @@ export class FakeDesktop implements DesktopBackend {
   async keyDown() {}
   async keyUp() {}
   async typeText() {}
+  async readClipboard() { return ""; }
+  async writeClipboard() {}
+  async drag() {}
+  async configureWindow() { return this.window; }
+  async listSurfaces() { return { surfaces: [], partial: false }; }
 }
 
 export class FakeAccessibility implements AccessibilityBackend {
   readonly name = "fake";
-  constructor(public elements: AccessibilityElement[] = [accessibilityElement()]) {}
+  constructor(public elements: AccessibilityElement[] = [accessibilityElement()], public partial = false) {}
   async getAvailability() { return { available: true, backend: this.name, reason: null }; }
-  async getElementsForWindow() { return this.elements; }
+  async getElementsForWindow() { return { elements: this.elements, partial: this.partial, failedNodes: this.partial ? 1 : 0 }; }
   async getElementGeometry() {
     const element = this.elements[0];
     return element ? { x: element.x, y: element.y, width: element.width, height: element.height } : null;
   }
+  async getElementState(target: { path: string }) {
+    const element = this.elements.find((item) => item.target.path === target.path);
+    if (!element) throw new Error("Element not found");
+    return { ...element, label: element.label ?? "", enabled: element.enabled === true };
+  }
+  async getActions() { return [{ name: "click", description: "Click", keybinding: "" }]; }
+  async performAction() { return true; }
   async focusElement() { return false; }
+  async readText() { return "document"; }
+  async readWindowText() { return { blocks: [{ role: "text", text: "document" }], partial: false }; }
 }

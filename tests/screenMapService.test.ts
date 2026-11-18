@@ -19,6 +19,9 @@ describe("ScreenMapService", () => {
     expect(Object.isFrozen(snapshot.elements)).toBe(true);
     expect(Object.isFrozen(snapshot.targets)).toBe(true);
     expect("set" in snapshot.targets).toBe(false);
+    let exposedMutableMap = false;
+    snapshot.targets.forEach((_value, _key, map) => { exposedMutableMap = "set" in map; });
+    expect(exposedMutableMap).toBe(false);
     expect(snapshot.targets.get(1)).toEqual({ backend: "fake", application: ":1.1", path: "/button" });
   });
 
@@ -31,11 +34,27 @@ describe("ScreenMapService", () => {
     expect(snapshot.screenshot.png.toString()).toBe("png");
   });
 
+  it("exposes partial accessibility traversal in snapshot metadata", async () => {
+    const service = new ScreenMapService(new FakeDesktop(), new FakeAccessibility([accessibilityElement()], true), new SnapshotCache(), renderer);
+    const snapshot = await service.observe({ activeWindow: true });
+    expect(snapshot.screenMapAvailable).toBe(true);
+    expect(snapshot.reason).toMatch(/partial/i);
+  });
+
   it("refuses a click when window geometry changed", async () => {
     const desktop = new FakeDesktop();
     const service = new ScreenMapService(desktop, new FakeAccessibility(), new SnapshotCache(), renderer);
     const snapshot = await service.observe({ activeWindow: true });
     desktop.window = { ...desktop.window, x: desktop.window.x + 100 };
+    await expect(service.clickElement(snapshot.snapshotId, 1, "left")).rejects.toBeInstanceOf(StaleSnapshotError);
+    expect(desktop.clicks).toBe(0);
+  });
+
+  it("refuses a click when the captured window is no longer active", async () => {
+    const desktop = new FakeDesktop();
+    const service = new ScreenMapService(desktop, new FakeAccessibility(), new SnapshotCache(), renderer);
+    const snapshot = await service.observe({ activeWindow: true });
+    desktop.getActiveWindow = async () => ({ ...desktop.window, id: "0x999" });
     await expect(service.clickElement(snapshot.snapshotId, 1, "left")).rejects.toBeInstanceOf(StaleSnapshotError);
     expect(desktop.clicks).toBe(0);
   });
@@ -57,6 +76,18 @@ describe("ScreenMapService", () => {
     await service.clickElement(snapshot.snapshotId, 1, "left");
     expect(desktop.moves).toEqual([{ x: 170, y: 95 }]);
     expect(desktop.clicks).toBe(1);
+  });
+
+  it("rejects a snapshot when the window moves during capture", async () => {
+    const desktop = new FakeDesktop();
+    const originalScreenshot = desktop.screenshot.bind(desktop);
+    desktop.screenshot = async () => {
+      const result = await originalScreenshot();
+      desktop.window = { ...desktop.window, x: desktop.window.x + 20 };
+      return result;
+    };
+    const service = new ScreenMapService(desktop, new FakeAccessibility(), new SnapshotCache(), renderer);
+    await expect(service.observe({ activeWindow: true })).rejects.toBeInstanceOf(StaleSnapshotError);
   });
 });
 

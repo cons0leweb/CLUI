@@ -16,8 +16,8 @@ export interface DesktopBackend {
   readonly capabilities: Capabilities;
 
   getActiveWindow(): Promise<WindowInfo | null>;
-  listWindows(): Promise<WindowInfo[]>;
-  findWindows(query: FindWindowQuery): Promise<WindowInfo[]>;
+  listWindows(timeoutMs?: number): Promise<WindowInfo[]>;
+  findWindows(query: FindWindowQuery, timeoutMs?: number): Promise<WindowInfo[]>;
   getWindowInfo(windowId: string): Promise<WindowInfo>;
   focusWindow(target: { windowId?: string; title?: string }, timeoutMs?: number): Promise<WindowInfo>;
 
@@ -35,6 +35,12 @@ export interface DesktopBackend {
   keyDown(key: string): Promise<void>;
   keyUp(key: string): Promise<void>;
   typeText(text: string, intervalMs?: number): Promise<void>;
+  readClipboard(): Promise<string>;
+  writeClipboard(text: string): Promise<void>;
+  drag(from: Point, to: Point, button: MouseButton, durationMs: number): Promise<void>;
+  configureWindow(windowId: string, options: { x?: number; y?: number; width?: number; height?: number; state?: "maximize" | "minimize" | "restore" }): Promise<WindowInfo>;
+  listSurfaces(): Promise<{ surfaces: WindowInfo[]; partial: boolean }>;
+  close?(): Promise<void>;
 }
 
 export function windowRelativePoint(window: Geometry, x: number, y: number, normalized: boolean): Point {

@@ -17,8 +17,8 @@ describe("tool schemas", () => {
   });
 
   it("requires a valid focus selector inside a batch", () => {
-    expect(actSchema.safeParse({ actions: [{ type: "focus" }] }).success).toBe(false);
-    expect(actSchema.safeParse({ actions: [{ type: "focus", title: "Minecraft" }] }).success).toBe(true);
+    expect(actSchema.safeParse({ session_id: "00000000-0000-4000-8000-000000000001", request_id: "test", actions: [{ type: "focus" }] }).success).toBe(false);
+    expect(actSchema.safeParse({ session_id: "00000000-0000-4000-8000-000000000001", request_id: "test", actions: [{ type: "focus", title: "Minecraft" }] }).success).toBe(true);
   });
 
   it("requires a region for region screenshots", () => {

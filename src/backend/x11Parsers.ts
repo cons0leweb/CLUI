@@ -69,7 +69,7 @@ export function parseXWinInfo(text: string): Pick<WindowInfo, "x" | "y" | "width
 
 export function shouldIncludeWindow(window: WindowInfo): boolean {
   if (!window.mapped || !window.title.trim() || window.width <= 1 || window.height <= 1) return false;
-  return !["desktop", "dock", "toolbar", "menu", "dropdown_menu", "popup_menu", "tooltip", "notification"].includes(window.type ?? "");
+  return !["dnd", "desktop", "dock", "toolbar", "menu", "dropdown_menu", "popup_menu", "tooltip", "notification"].includes(window.type ?? "");
 }
 
 export function parseXrandrMonitors(text: string): MonitorInfo[] {
@@ -87,4 +87,8 @@ export function parseXrandrMonitors(text: string): MonitorInfo[] {
     });
   }
   return monitors;
+}
+
+export function parseWindowTreeIds(output: string): string[] {
+  return [...new Set([...output.matchAll(/^\s+(0x[0-9a-f]+)\s/gim)].map((match) => normalizeWindowId(match[1]!)))];
 }

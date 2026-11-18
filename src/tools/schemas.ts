@@ -32,16 +32,28 @@ export const screenshotSchema = z.object({
   if (value.mode === "region" && !value.region) context.addIssue({ code: "custom", path: ["region"], message: "region is required when mode=region" });
 });
 
+export const preconditionsSchema = z.object({
+  active_window_id: windowIdSchema.optional(),
+  element: z.object({ snapshot_id: z.string().uuid(), element_id: z.number().int().positive(), name: z.string().optional() }).optional(),
+});
+export const stepConditions = z.object({ preconditions: preconditionsSchema.optional(), expected_window_id: windowIdSchema.optional(), confirmed: z.never().optional() });
+export const requestFields = z.object({
+  session_id: z.string().uuid(), request_id: z.string().min(1).max(128),
+  preconditions: preconditionsSchema.optional(), expected_window_id: windowIdSchema.optional(),
+  confirmed: z.never().optional(),
+});
+export function withActionFields<T extends z.ZodType>(schema: T) { return schema.and(requestFields); }
+
 const focusActionSchema = z.object({ type: z.literal("focus"), window_id: windowIdSchema.optional(), title: z.string().min(1).optional(), timeout_ms: z.number().int().min(100).max(10_000).optional() })
   .refine((value) => Boolean(value.window_id) !== Boolean(value.title), "Focus requires exactly one of window_id or title");
 const moveActionSchema = z.object({ type: z.literal("move"), x: coordinateSchema, y: coordinateSchema, duration_ms: durationSchema.optional(), window_id: windowIdSchema.optional(), normalized: z.boolean().default(false) });
 const clickActionSchema = z.object({ type: z.literal("click"), x: coordinateSchema.optional(), y: coordinateSchema.optional(), button: mouseButtonSchema.default("left"), count: z.number().int().min(1).max(10).default(1), interval_ms: z.number().int().min(0).max(2_000).default(100), window_id: windowIdSchema.optional(), normalized: z.boolean().default(false) })
   .refine((value) => (value.x === undefined) === (value.y === undefined), "Click x and y must be provided together");
-const keyActionSchema = z.object({ type: z.literal("key"), key: z.string().min(1).max(64), modifiers: z.array(modifierSchema).max(4).default([]) });
+const keyActionSchema = z.object({ type: z.literal("key"), key: z.string().min(1).max(64).regex(/^[A-Za-z0-9_]+(?:\+[A-Za-z0-9_]+)*$/), modifiers: z.array(modifierSchema).max(4).default([]) });
 const typeActionSchema = z.object({ type: z.literal("type"), text: z.string().max(100_000), interval_ms: z.number().int().min(0).max(1_000).default(12) });
 const waitActionSchema = z.object({ type: z.literal("wait"), milliseconds: z.number().int().min(0).max(10_000) });
 const scrollActionSchema = z.object({ type: z.literal("scroll"), delta_x: z.number().int().min(-100).max(100).default(0), delta_y: z.number().int().min(-100).max(100).default(0) });
 
-export const actSchema = z.object({
-  actions: z.array(z.discriminatedUnion("type", [focusActionSchema, moveActionSchema, clickActionSchema, keyActionSchema, typeActionSchema, waitActionSchema, scrollActionSchema])).min(1).max(20),
-});
+export const actSchema = withActionFields(z.object({
+  actions: z.array(z.union([focusActionSchema.and(stepConditions), moveActionSchema.and(stepConditions), clickActionSchema.and(stepConditions), keyActionSchema.and(stepConditions), typeActionSchema.and(stepConditions), waitActionSchema.and(stepConditions), scrollActionSchema.and(stepConditions)])).min(1).max(20),
+}));

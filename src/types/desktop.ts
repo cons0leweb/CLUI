@@ -59,6 +59,7 @@ export interface Capabilities {
   display: string | null;
   waylandDisplay: string | null;
   executables: Record<string, boolean>;
+  executableInstalled?: Record<string, boolean>;
   screenshotBackend: "maim" | "import" | "scrot" | null;
   canObserveWindows: boolean;
   canInteract: boolean;

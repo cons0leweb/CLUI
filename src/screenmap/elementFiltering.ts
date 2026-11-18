@@ -6,6 +6,7 @@ const USEFUL_ROLES = new Set([
   "push button", "button", "link", "text", "entry", "password text", "check box", "radio button",
   "page tab", "page tab list", "menu", "menu item", "check menu item", "radio menu item", "heading", "header",
   "list item", "tree item", "combo box", "spin button", "slider", "toggle button", "table cell", "paragraph",
+  "scroll pane", "viewport", "panel",
   "label", "static", "document web", "document frame",
 ]);
 
@@ -33,7 +34,7 @@ export function filterElements(elements: AccessibilityElement[], window: WindowI
     if (intersection(element, window) <= 0) return false;
     if (element.clickable || element.focusable || element.editable || element.focused || element.selected) return true;
     const meaningful = Boolean(element.label?.trim()) && USEFUL_ROLES.has(element.role.toLocaleLowerCase());
-    return meaningful || (includeNonInteractive && Boolean(element.label?.trim()));
+    return meaningful || /^(scroll pane|viewport)$/.test(element.role.toLocaleLowerCase()) || (includeNonInteractive && Boolean(element.label?.trim()));
   }));
 
   const deduplicated: AccessibilityElement[] = [];

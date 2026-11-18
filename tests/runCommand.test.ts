@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -31,6 +31,26 @@ describe.sequential("runCommand", () => {
   it("kills a command that exceeds its timeout", async () => {
     await fixture("#!/bin/sh\nwhile :; do :; done\n");
     await expect(runCommand("xprop", [], { timeoutMs: 30 })).rejects.toMatchObject({ kind: "timeout" } satisfies Partial<CommandError>);
+  });
+
+  it("kills descendants and does not return while the process group is alive", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "clui-runner-tree-"));
+    directories.push(directory);
+    const marker = join(directory, "descendant-survived");
+    const path = join(directory, "xprop");
+    await writeFile(path, `#!/bin/sh\n(sleep 0.15; touch '${marker}') &\nwhile :; do :; done\n`);
+    await chmod(path, 0o755);
+    process.env.PATH = directory;
+    await expect(runCommand("xprop", [], { timeoutMs: 30 })).rejects.toMatchObject({ kind: "timeout" } satisfies Partial<CommandError>);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await expect(access(marker)).rejects.toThrow();
+  });
+
+  it("supports detached selection owners without retaining output pipes", async () => {
+    await fixture("#!/bin/sh\n/bin/cat >/dev/null\n(/bin/sleep 0.2) &\nexit 0\n");
+    const result = await runCommand("xprop", [], { discardOutput: true, input: Buffer.from("Привет"), timeoutMs: 1000 });
+    expect(result.stdout.length).toBe(0);
+    expect(result.exitCode).toBe(0);
   });
 
   it("turns ENOENT into a typed, actionable error", async () => {

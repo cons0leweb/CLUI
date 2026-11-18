@@ -16,10 +16,15 @@ For local X11 development, install the system packages listed in the README. The
 
 ## Design boundaries
 
+The accepted [action execution contract](docs/action-execution.md) governs
+action execution. It specifies shared standalone/batch execution,
+fail-closed checks, trusted approval, uncertain outcomes, and replay protection.
+Keep the runtime limits and supported approval transport documented in README.
+
 - Desktop semantics belong behind `DesktopBackend`.
 - X11 command output parsing belongs in `src/backend/x11Parsers.ts`.
 - MCP handlers should validate and translate inputs, not implement X11 mechanics.
-- Every external process must go through the fixed allowlist in `src/system/runCommand.ts`.
+- Every external process must go through the fixed allowlist in `src/system/runCommand.ts`. Finite commands use `runCommand`; the persistent cursor indicator uses `spawnAllowedCommand` with its fixed packaged helper. Do not expose executable names or Python code through MCP inputs.
 - Do not add shell, arbitrary executable, browser automation, or implicit OCR tools.
 - New high-impact behavior must be classified centrally in `ActionGuard`.
 

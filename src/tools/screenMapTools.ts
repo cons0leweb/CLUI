@@ -1,8 +1,9 @@
+import { withActionFields } from "./schemas.js";
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import type { ScreenElement } from "../types/screenMap.js";
 import type { ToolContext } from "./context.js";
-import { executeTool, screenshotResult, textResult } from "./context.js";
+import { withToolRequest, executeTool, screenshotResult, textResult } from "./context.js";
 import { dimensionSchema, mouseButtonSchema, windowIdSchema } from "./schemas.js";
 
 export const snapshotIdSchema = z.string().uuid();
@@ -58,7 +59,7 @@ export function registerScreenMapTools(server: McpServer, context: ToolContext):
   server.registerTool("desktop_observe_marked", {
     description: "Capture one X11 window, read its AT-SPI accessibility tree, and return an immutable snapshot with numbered elements and an annotated PNG. Falls back to the raw PNG when accessibility is unavailable.",
     inputSchema: observeMarkedSchema,
-  }, async (input) => executeTool(context, "desktop_observe_marked", input, async () => {
+  }, async (input, extra) => executeTool(withToolRequest(context, extra), "desktop_observe_marked", input, async () => {
     const snapshot = await context.screenMap.observe({
       ...(input.window_id ? { windowId: input.window_id } : {}),
       ...(input.title ? { title: input.title } : {}),
@@ -81,7 +82,7 @@ export function registerScreenMapTools(server: McpServer, context: ToolContext):
       interactive_only: z.boolean().default(false),
       visible_only: z.boolean().default(true),
     }),
-  }, async (input) => executeTool(context, "desktop_get_elements", input, async () => {
+  }, async (input, extra) => executeTool(withToolRequest(context, extra), "desktop_get_elements", input, async () => {
     const snapshot = context.screenMap.getSnapshot(input.snapshot_id);
     const elements = filterSnapshotElements(snapshot.elements, {
       ...(input.role ? { role: input.role } : {}),
@@ -95,30 +96,71 @@ export function registerScreenMapTools(server: McpServer, context: ToolContext):
   server.registerTool("desktop_element_info", {
     description: "Return one complete element object from an existing ScreenMap snapshot.",
     inputSchema: z.object({ snapshot_id: snapshotIdSchema, element_id: elementIdSchema }),
-  }, async (input) => executeTool(context, "desktop_element_info", input, async () => textResult({
+  }, async (input, extra) => executeTool(withToolRequest(context, extra), "desktop_element_info", input, async () => textResult({
     snapshot_id: input.snapshot_id,
     element: context.screenMap.getElement(input.snapshot_id, input.element_id),
   })));
 
   server.registerTool("desktop_click_element", {
     description: "Click a numbered ScreenMap element after checking snapshot lifetime and current window geometry.",
-    inputSchema: z.object({
+    inputSchema: withActionFields(z.object({
       snapshot_id: snapshotIdSchema,
       element_id: elementIdSchema,
       button: mouseButtonSchema.default("left"),
       click_position: clickPositionSchema.default({ type: "center" }),
-    }),
-  }, async (input) => executeTool(context, "desktop_click_element", input, async () => {
+    })),
+  }, async (input, extra) => executeTool(withToolRequest(context, extra), "desktop_click_element", input, async () => {
     const result = await context.screenMap.clickElement(input.snapshot_id, input.element_id, input.button, input.click_position);
     return textResult({ snapshot_id: input.snapshot_id, element_id: input.element_id, clicked_at: result.point, button: input.button });
   }));
 
   server.registerTool("desktop_focus_element", {
-    description: "Focus a numbered element using AT-SPI Component.GrabFocus, with a checked mouse click fallback.",
-    inputSchema: z.object({ snapshot_id: snapshotIdSchema, element_id: elementIdSchema }),
-  }, async (input) => executeTool(context, "desktop_focus_element", input, async () => textResult({
+    description: "Focus a checked element using AT-SPI Component.GrabFocus. An attempted accessibility focus is never retried as a physical click.",
+    inputSchema: withActionFields(z.object({ snapshot_id: snapshotIdSchema, element_id: elementIdSchema })),
+  }, async (input, extra) => executeTool(withToolRequest(context, extra), "desktop_focus_element", input, async () => textResult({
     snapshot_id: input.snapshot_id,
     element_id: input.element_id,
     ...(await context.screenMap.focusElement(input.snapshot_id, input.element_id)),
   })));
+  server.registerTool("desktop_scroll_element", {
+    description: "Position the pointer inside a checked ScreenMap container and scroll there. Deltas are wheel steps. Observe again after scrolling; nested controls may intercept wheel events.",
+    inputSchema: withActionFields(z.object({ snapshot_id: snapshotIdSchema, element_id: elementIdSchema,
+      delta_x: z.number().int().min(-100).max(100).default(0), delta_y: z.number().int().min(-100).max(100).default(0) })),
+  }, async (input, extra) => executeTool(withToolRequest(context, extra), "desktop_scroll_element", input, async () => {
+    await context.screenMap.scrollElement(input.snapshot_id, input.element_id, input.delta_x, input.delta_y);
+    return textResult({ scrolled: true, observe_again: true });
+  }));
+
+  server.registerTool("desktop_drag_element", {
+    description: "Drag between two checked elements in the same ScreenMap snapshot. Always attempts button release.",
+    inputSchema: withActionFields(z.object({ snapshot_id: snapshotIdSchema, from_element_id: elementIdSchema, to_element_id: elementIdSchema,
+      button: mouseButtonSchema.default("left"), duration_ms: z.number().int().min(100).max(5_000).default(600) })),
+  }, async (input, extra) => executeTool(withToolRequest(context, extra), "desktop_drag_element", input, async () => {
+    await context.screenMap.dragElements(input.snapshot_id, input.from_element_id, input.to_element_id, input.button, input.duration_ms);
+    return textResult({ dragged: true, observe_again: true });
+  }));
+
+  server.registerTool("desktop_read_element_text", {
+    description: "Read a live AT-SPI Text range, including offscreen text exposed by the element. Offsets count Unicode characters. Password roles are excluded; no OCR. Requires a retained snapshot.",
+    inputSchema: z.object({ snapshot_id: snapshotIdSchema, element_id: elementIdSchema,
+      start_offset: z.number().int().min(0).max(2_000_000_000).default(0), length: z.number().int().min(1).max(100_000).default(10_000) }),
+  }, async (input, extra) => executeTool(withToolRequest(context, extra), "desktop_read_element_text", input, async () => textResult({
+    text: await context.screenMap.readElementText(input.snapshot_id, input.element_id, input.start_offset, input.start_offset + input.length),
+    start_offset: input.start_offset, requested_length: input.length,
+  })));
+
+  server.registerTool("desktop_read_window_text", {
+    description: "Traverse window accessibility nodes and read published Text content without visibility/geometry filtering. Includes offscreen content when exposed by the app. Bounded scan; partial=true means content may be missing. No OCR; password roles excluded.",
+    inputSchema: z.object({ window_id: windowIdSchema, max_characters: z.number().int().min(1).max(100_000).default(20_000) }),
+  }, async (input, extra) => executeTool(withToolRequest(context, extra), "desktop_read_window_text", input, async () => textResult(await context.screenMap.readWindowText(input.window_id, input.max_characters))));
+  server.registerTool("desktop_get_element_actions", {
+    description: "List live AT-SPI semantic action names for an element. Does not invoke an action.",
+    inputSchema: z.object({ snapshot_id: snapshotIdSchema, element_id: elementIdSchema }),
+  }, async (input, extra) => executeTool(withToolRequest(context, extra), "desktop_get_element_actions", input, async () => textResult({ actions: await context.screenMap.getElementActions(input.snapshot_id, input.element_id) })));
+
+  server.registerTool("desktop_perform_element_action", {
+    description: "Invoke one explicitly named AT-SPI action after shared preconditions and human approval. No physical-click fallback or automatic retry exists. Requires session_id and a new request_id; duplicate IDs replay the recorded result.",
+    inputSchema: withActionFields(z.object({ snapshot_id: snapshotIdSchema, element_id: elementIdSchema, action_name: z.string().min(1).max(256) })),
+  }, async (input, extra) => executeTool(withToolRequest(context, extra), "desktop_perform_element_action", input, async () => textResult(await context.screenMap.performElementAction(input.snapshot_id, input.element_id, input.action_name))));
+
 }

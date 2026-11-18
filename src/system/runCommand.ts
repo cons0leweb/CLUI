@@ -9,6 +9,9 @@ export const ALLOWED_EXECUTABLES = [
   "import",
   "convert",
   "scrot",
+  "xclip",
+  "wmctrl",
+  "python3",
 ] as const;
 
 export type AllowedExecutable = (typeof ALLOWED_EXECUTABLES)[number];
@@ -17,6 +20,8 @@ export interface CommandOptions {
   timeoutMs?: number;
   input?: Buffer;
   maxOutputBytes?: number;
+  env?: NodeJS.ProcessEnv;
+  discardOutput?: boolean;
 }
 
 export interface CommandResult {
@@ -44,6 +49,17 @@ function isAllowed(value: string): value is AllowedExecutable {
   return (ALLOWED_EXECUTABLES as readonly string[]).includes(value);
 }
 
+// Shared process boundary for finite commands and the fixed, persistent indicator helper.
+export function spawnAllowedCommand(executable: AllowedExecutable, args: readonly string[], options: CommandOptions = {}) {
+  if (!isAllowed(executable)) throw new Error(`Executable is not allowlisted: ${String(executable)}`);
+  return spawn(executable, [...args], {
+    shell: false,
+    stdio: [options.input ? "pipe" : "ignore", options.discardOutput ? "ignore" : "pipe", options.discardOutput ? "ignore" : "pipe"],
+    env: options.env ?? process.env,
+    detached: process.platform !== "win32",
+  });
+}
+
 export async function runCommand(
   executable: AllowedExecutable,
   args: readonly string[],
@@ -57,50 +73,54 @@ export async function runCommand(
   const started = performance.now();
 
   return await new Promise<CommandResult>((resolve, reject) => {
-    const child = spawn(executable, [...args], {
-      shell: false,
-      stdio: [options.input ? "pipe" : "ignore", "pipe", "pipe"],
-      env: process.env,
-    });
+    const child = spawnAllowedCommand(executable, args, options);
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let outputBytes = 0;
     let settled = false;
+    let failure: CommandError | null = null;
+
+    const killTree = (): void => {
+      if (!child.pid) return;
+      try {
+        if (process.platform !== "win32") process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      }
+    };
 
     const fail = (error: CommandError): void => {
-      if (settled) return;
-      settled = true;
+      if (failure) return;
+      failure = error;
       clearTimeout(timer);
-      reject(error);
+      killTree();
     };
 
     const timer = setTimeout(() => {
-      child.kill("SIGKILL");
       fail(new CommandError(`${executable} timed out after ${timeoutMs}ms`, executable, args, "timeout", null, Buffer.concat(stderr).toString("utf8")));
     }, timeoutMs);
     timer.unref();
 
     const stdoutStream = child.stdout;
     const stderrStream = child.stderr;
-    if (!stdoutStream || !stderrStream) {
+    if ((!stdoutStream || !stderrStream) && !options.discardOutput) {
       child.kill("SIGKILL");
       fail(new CommandError(`Failed to capture ${executable} output`, executable, args, "spawn", null, ""));
       return;
     }
 
-    stdoutStream.on("data", (chunk: Buffer) => {
+    stdoutStream?.on("data", (chunk: Buffer) => {
       outputBytes += chunk.length;
       if (outputBytes > maxOutputBytes) {
-        child.kill("SIGKILL");
         fail(new CommandError(`${executable} exceeded output limit`, executable, args, "output_limit", null, Buffer.concat(stderr).toString("utf8")));
         return;
       }
       stdout.push(chunk);
     });
-    stderrStream.on("data", (chunk: Buffer) => {
+    stderrStream?.on("data", (chunk: Buffer) => {
       outputBytes += chunk.length;
       if (outputBytes > maxOutputBytes) {
-        child.kill("SIGKILL");
         fail(new CommandError(`${executable} exceeded output limit`, executable, args, "output_limit", null, Buffer.concat(stderr).toString("utf8")));
         return;
       }
@@ -122,6 +142,10 @@ export async function runCommand(
       settled = true;
       clearTimeout(timer);
       const stderrText = Buffer.concat(stderr).toString("utf8").trim();
+      if (failure) {
+        reject(failure);
+        return;
+      }
       if (code !== 0) {
         reject(new CommandError(`${executable} exited with code ${code}${stderrText ? `: ${stderrText}` : ""}`, executable, args, "exit", code, stderrText));
         return;
@@ -129,6 +153,9 @@ export async function runCommand(
       resolve({ stdout: Buffer.concat(stdout), stderr: stderrText, exitCode: 0, durationMs: performance.now() - started });
     });
 
+    child.stdin?.on("error", (error: NodeJS.ErrnoException) => {
+      fail(new CommandError(`Failed to send input to ${executable}: ${error.code ?? "write error"}`, executable, args, "spawn", null, ""));
+    });
     if (options.input) child.stdin?.end(options.input);
   });
 }
