@@ -82,13 +82,14 @@ npm run dev
 
 ## Codex config
 
-Add this to `~/.codex/config.toml` and adjust the paths:
+Add this to `~/.codex/config.toml`. Replace `/absolute/path/to/CLUI` with the
+absolute path to your cloned repository in both `args` and `cwd`:
 
 ```toml
 [mcp_servers.clui]
 command = "node"
-args = ["/home/cons0leweb/JS/CLUI/dist/index.js"]
-cwd = "/home/cons0leweb/JS/CLUI"
+args = ["/absolute/path/to/CLUI/dist/index.js"]
+cwd = "/absolute/path/to/CLUI"
 env_vars = ["DISPLAY", "XAUTHORITY", "XDG_SESSION_TYPE", "WAYLAND_DISPLAY"]
 startup_timeout_sec = 10
 tool_timeout_sec = 60

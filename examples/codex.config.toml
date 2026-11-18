@@ -1,8 +1,9 @@
-# Merge this table into ~/.codex/config.toml and adjust paths as needed.
+# Merge this table into ~/.codex/config.toml.
+# Replace /absolute/path/to/CLUI in both args and cwd with your repository path.
 [mcp_servers.clui]
 command = "node"
-args = ["/home/cons0leweb/JS/CLUI/dist/index.js"]
-cwd = "/home/cons0leweb/JS/CLUI"
+args = ["/absolute/path/to/CLUI/dist/index.js"]
+cwd = "/absolute/path/to/CLUI"
 env_vars = ["DISPLAY", "XAUTHORITY", "XDG_SESSION_TYPE", "WAYLAND_DISPLAY"]
 startup_timeout_sec = 10
 tool_timeout_sec = 60
