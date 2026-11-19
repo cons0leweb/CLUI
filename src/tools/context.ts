@@ -1,3 +1,4 @@
+import { publishOutcome } from "../events/VisualEventPublisher.js";
 import type { ActionExecutor } from "../actions/ActionExecutor.js";
 import { describeIndicatorAction } from "../indicator/actionDescription.js";
 import type { CursorIndicator } from "../indicator/CursorIndicator.js";
@@ -32,6 +33,7 @@ export async function executeTool<T>(
   try {
     if (context.executor && classification !== "read_only" && name !== "desktop_act" && name !== "desktop_control_session") {
       const result = await context.executor.execute(input as Record<string, unknown>, [{ name, input: input as Record<string, unknown>, run: async () => dispatchPayload(await runOperation()) }], context.requestSignal);
+      publishOutcome(result.status);
       return textResult(result) as T;
     }
     if (!context.executor || classification === "read_only") await context.guard.authorize(name, classification);
@@ -48,6 +50,10 @@ export async function executeTool<T>(
       }
       const observationToken = context.executor?.observationToken;
       const result = await operation();
+      if (name === "desktop_act") {
+        const outcome = dispatchPayload(result) as { status?: unknown };
+        if (typeof outcome?.status === "string") publishOutcome(outcome.status);
+      }
       if (name === "desktop_observe" || name === "desktop_observe_marked") context.executor?.markObserved(observationToken);
       log("info", "tool_complete", { tool: name, classification, duration_ms: Math.round(performance.now() - started) });
       return result;

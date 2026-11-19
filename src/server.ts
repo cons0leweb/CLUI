@@ -1,3 +1,4 @@
+import { publishVisual } from "./events/VisualEventPublisher.js";
 import { ActionExecutor } from "./actions/ActionExecutor.js";
 import { PreconditionValidator } from "./actions/PreconditionValidator.js";
 import { describeIndicatorAction } from "./indicator/actionDescription.js";
@@ -21,9 +22,12 @@ export function createServer(backend: DesktopBackend, screenMap: ScreenMapServic
     const label = await describeIndicatorAction(tool, input, backend, screenMap);
     const identity = input as { request_id?: string; step_index?: number };
     const began = Date.now();
-    const response = await server.server.elicitInput({ mode: "form", message: `CLUI requests human approval: ${label}. Request ${identity.request_id}, step ${identity.step_index}. Allow this one action?`, requestedSchema: { type: "object", properties: { approve: { type: "boolean", title: "Allow this action", default: false } }, required: ["approve"] } }, { timeout: 30_000, ...(signal ? { signal } : {}) });
-    if (Date.now() - began > 30_000) return "unavailable";
-    return response.action === "accept" && response.content?.approve === true ? "approved" : "denied";
+    publishVisual("approval");
+    try {
+      const response = await server.server.elicitInput({ mode: "form", message: `CLUI requests human approval: ${label}. Request ${identity.request_id}, step ${identity.step_index}. Allow this one action?`, requestedSchema: { type: "object", properties: { approve: { type: "boolean", title: "Allow this action", default: false } }, required: ["approve"] } }, { timeout: 30_000, ...(signal ? { signal } : {}) });
+      if (Date.now() - began > 30_000) return "unavailable";
+      return response.action === "accept" && response.content?.approve === true ? "approved" : "denied";
+    } finally { publishVisual("approval", "end"); }
   });
   const executor = new ActionExecutor(backend, new PreconditionValidator(backend, screenMap), guard);
   const context = { backend, guard, screenMap, executor, ...(indicator ? { indicator } : {}) };

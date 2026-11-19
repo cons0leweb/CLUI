@@ -1,3 +1,4 @@
+import { publishVisual, type VisualKind } from "../events/VisualEventPublisher.js";
 import { withActionFields } from "./schemas.js";
 import { describeIndicatorAction } from "../indicator/actionDescription.js";
 import type { McpServer } from "@modelcontextprotocol/server";
@@ -86,6 +87,8 @@ export function registerObservationTools(server: McpServer, context: ToolContext
       name: names[action.type],
       input: { ...action, preconditions: action.preconditions ?? input.preconditions, expected_window_id: action.expected_window_id ?? input.expected_window_id },
       run: async () => {
+        const visualKind: VisualKind = action.type === "type" || action.type === "key" ? "type" : action.type === "click" ? "click" : "activity";
+        publishVisual(visualKind);
         const finish = context.indicator?.beginAction(await describeIndicatorAction(names[action.type], action, context.backend, context.screenMap));
         try {
        switch (action.type) {
@@ -120,7 +123,7 @@ export function registerObservationTools(server: McpServer, context: ToolContext
        }
 
           return { type: action.type };
-        } finally { finish?.(); }
+        } finally { finish?.(); publishVisual(visualKind, "end"); }
       },
     }));
     return textResult(await context.executor.execute(input, steps, extra.mcpReq.signal));

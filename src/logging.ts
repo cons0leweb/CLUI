@@ -1,6 +1,8 @@
+import { publishLogEvent } from "./events/VisualEventPublisher.js";
 export type LogLevel = "info" | "error";
 
 export function log(level: LogLevel, event: string, fields: object = {}): void {
+  publishLogEvent(event, fields);
   process.stderr.write(`${JSON.stringify({ timestamp: new Date().toISOString(), level, event, ...fields })}\n`);
 }
 

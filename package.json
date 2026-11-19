@@ -20,14 +20,17 @@
   "homepage": "https://github.com/cons0leweb/CLUI#readme",
   "type": "module",
   "bin": {
-    "clui-mcp": "dist/index.js"
+    "clui-mcp": "dist/index.js",
+    "clui-pet": "dist/pet/cli.js"
   },
   "files": [
     "dist",
     "README.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
-    "LICENSE"
+    "LICENSE",
+    "docs",
+    "scripts/pet-smoke.mjs"
   ],
   "engines": {
     "node": ">=20"
@@ -41,7 +44,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke": "tsx scripts/smoke.ts",
-    "demo": "tsx scripts/demo.ts"
+    "demo": "tsx scripts/demo.ts",
+    "pet:start": "node dist/pet/cli.js start",
+    "pet:stop": "node dist/pet/cli.js stop",
+    "pet:status": "node dist/pet/cli.js status",
+    "pet:run": "node dist/pet/cli.js run",
+    "pet:smoke": "node scripts/pet-smoke.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
@@ -59,5 +67,8 @@
     "typescript": "^6.0.0",
     "vitest": "^3.2.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "optionalDependencies": {
+    "x11": "4.4.0"
+  }
 }

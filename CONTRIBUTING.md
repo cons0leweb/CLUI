@@ -19,8 +19,11 @@ For local X11 development, install the system packages listed in the README. The
 The accepted [action execution contract](docs/action-execution.md) governs
 action execution. It specifies shared standalone/batch execution,
 fail-closed checks, trusted approval, uncertain outcomes, and replay protection.
-Keep the runtime limits and supported approval transport documented in README.
+Keep runtime limits and supported approval transport documented in the
+[tool reference](docs/tool-reference.md), with a concise overview in README.
 
+- Optional visual addons belong in `src/pet/`; generic lossy telemetry belongs in `src/events/`. The core must not import the pet, await it, accept its responses, or depend on its optional X11 package. Add only observational instrumentation; do not change action/approval policy for a visual feature.
+- The standalone TS pet launcher may spawn only its own fixed Node.js entry point for independent lifecycle management.
 - Desktop semantics belong behind `DesktopBackend`.
 - X11 command output parsing belongs in `src/backend/x11Parsers.ts`.
 - MCP handlers should validate and translate inputs, not implement X11 mechanics.
@@ -36,5 +39,10 @@ Before opening a pull request:
 2. Run `npm run build` and `npm test`.
 3. Update the README when tools, dependencies, security behavior, or limitations change.
 4. Keep generated `dist/`, screenshots, credentials, and local environment files out of Git.
+
+To regenerate the README's animated pet preview after artwork changes, build
+first, then run `node scripts/readme-animation.mjs` (requires ImageMagick's
+`magick` command). The preview uses the production animator and contains no
+desktop capture or application data.
 
 CI intentionally runs only deterministic build and unit checks. Interactive X11 smoke tests remain local because GitHub-hosted runners do not provide the target desktop session.

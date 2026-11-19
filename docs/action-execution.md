@@ -3,7 +3,8 @@
 Status: implemented shared execution contract. Implementation provides
 session-scoped replay protection, live preconditions, legacy MCP form approval
 (fail-closed in unsupported modes), and explicit semantic AT-SPI actions.
-See README for public arguments, classification scope, and runtime limits.
+See the [tool reference](tool-reference.md) for public arguments, classification
+scope, and runtime limits.
 CLUI remains a desktop interaction server. Terminal, LSP, and Git integrations
 belong to other servers.
 
